@@ -4,6 +4,10 @@ import { useState, type FormEvent } from "react";
 import { ArrowUpRight, CheckCircle2, LoaderCircle } from "lucide-react";
 import { Input } from "../ui/input";
 
+const ACCESS_KEY =
+  process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY ||
+  "ed671d6c-7f87-40f4-8f76-94b8f181465f";
+
 export function ContactForm() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,16 +21,38 @@ export function ContactForm() {
     setStatus("");
 
     try {
-      const response = await fetch("/api/contact", {
+      const formData = new FormData(form);
+
+      // Spam honeypot: if bot filled it, silently show success without sending
+      if (formData.get("website")) {
+        setSent(true);
+        setStatus("Message received. Thank you for reaching out.");
+        form.reset();
+        return;
+      }
+
+      formData.append("access_key", ACCESS_KEY);
+      formData.append(
+        "subject",
+        `New Portfolio Message from ${formData.get("name") || "Visitor"}`,
+      );
+
+      const response = await fetch("https://api.web3forms.com/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+        body: formData,
       });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok)
+
+      const data = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+      };
+
+      if (!response.ok || !data.success) {
         throw new Error(
-          data.error || "Could not send your message. Please try again.",
+          data.message || "Could not send your message. Please try again.",
         );
+      }
+
       setSent(true);
       setStatus("Message received. Thank you for reaching out.");
       form.reset();
